@@ -5,8 +5,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    strictPort: true,
+    watch: {
+      usePolling: process.env.VITE_USE_POLLING === 'true',
+    },
     proxy: {
-      '/api': 'http://127.0.0.1:3000',
+      '/api': process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:3000',
     },
   },
 });

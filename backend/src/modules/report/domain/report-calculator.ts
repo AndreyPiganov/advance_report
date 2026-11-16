@@ -1,6 +1,6 @@
-import { formatMoney, remainingMoney, sumMoney } from './money';
-import type { ContractRecord, Dataset, PaymentRecord, WorkRecord, WorkStatus, ReportResponse } from './report.types';
-import { validateDate } from './dataset';
+import { formatMoney, remainingMoney, sumMoney } from '../../../common/utils/money';
+import { validateDate } from '../../../common/utils/date';
+import type { ContractRecord, Dataset, PaymentRecord, WorkRecord, WorkStatus, Report } from './report.types';
 
 function statusAt(work: WorkRecord, asOfDate: string): WorkStatus {
   if (work.cancelledAt && work.cancelledAt <= asOfDate) return 'cancelled';
@@ -49,7 +49,7 @@ function reportContract(
   contract: ContractRecord,
   dataset: Dataset,
   asOfDate: string,
-): ReportResponse['contracts'][number] {
+): Report['contracts'][number] {
   const works = dataset.works.filter((work) => work.contractId === contract.contractId);
   const payments = dataset.payments.filter((payment) => payment.contractId === contract.contractId);
   const netPayments = payments.map((payment) => ({ payment, cents: paidAtDate(payment, asOfDate) }));
@@ -109,7 +109,7 @@ function reportContract(
   };
 }
 
-export function calculateReport(dataset: Dataset, reportDate: string): ReportResponse {
+export function calculateReport(dataset: Dataset, reportDate: string): Report {
   const asOfDate = validateDate(reportDate, 'date');
   const contracts = dataset.contracts
     .filter((contract) => contract.signedAt <= asOfDate)

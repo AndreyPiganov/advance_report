@@ -1,0 +1,7 @@
+FROM node:22-alpine AS development
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ ./
+EXPOSE 5173
+CMD ["npm", "run", "dev"]

@@ -1,22 +1,13 @@
-import { parseCsv, type CsvRow } from './csv';
-import { parseMoney } from './money';
-import type { ContractRecord, Dataset, PaymentRecord, WorkRecord, WorkStatus } from './report.types';
+import { parseCsv, type CsvRow } from './csv.parser';
+import { parseMoney } from '../../../../common/utils/money';
+import { validateDate } from '../../../../common/utils/date';
+import type { ContractRecord, Dataset, PaymentRecord, WorkRecord, WorkStatus } from '../../domain/report.types';
 
 const CONTRACT_COLUMNS = ['contract_id', 'contractor', 'amount', 'signed_at'];
 const WORK_COLUMNS = ['work_id', 'contract_id', 'title', 'price', 'status', 'completed_at', 'cancelled_at'];
 const PAYMENT_COLUMNS = [
   'payment_id', 'contract_id', 'work_id', 'purpose', 'amount', 'status', 'created_at', 'paid_at', 'refunded_at',
 ];
-
-export function validateDate(value: string, label: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`${label}: ожидается дата YYYY-MM-DD`);
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
-    throw new Error(`${label}: несуществующая календарная дата`);
-  }
-  return value;
-}
 
 function required(row: CsvRow, key: string, source: string, rowNumber: number): string {
   const value = row[key];

@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { ReportController } from './report/report.controller';
-import { ReportService } from './report/report.service';
+import { AppConfigModule } from './config/app-config.module';
+import { HealthModule } from './modules/health/health.module';
+import { ReportModule } from './modules/report/report.module';
 
 @Module({
-  controllers: [ReportController],
-  providers: [ReportService],
+  imports: [AppConfigModule, HealthModule, ReportModule],
 })
 export class AppModule {}

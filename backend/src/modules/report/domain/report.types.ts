@@ -57,7 +57,7 @@ export interface ContractReport {
   works: WorkReport[];
 }
 
-export interface ReportResponse {
+export interface Report {
   asOfDate: string;
   contracts: ContractReport[];
 }

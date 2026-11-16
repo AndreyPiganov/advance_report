@@ -6,7 +6,7 @@ export function parseMoney(value: string, label: string): bigint {
     throw new Error(`${label}: ожидается неотрицательная сумма с точностью до копеек`);
   }
 
-  const rubles = BigInt(match[1]);
+  const rubles = BigInt(match[1]!);
   const kopecks = BigInt((match[2] ?? '').padEnd(2, '0') || '0');
   return rubles * 100n + kopecks;
 }

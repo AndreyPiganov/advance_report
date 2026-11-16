@@ -19,7 +19,7 @@ function splitCsv(content: string, sourceName: string): string[][] {
   };
 
   for (let index = 0; index < content.length; index += 1) {
-    const character = content[index];
+    const character = content[index]!;
 
     if (inQuotes) {
       if (character === '"' && content[index + 1] === '"') {
@@ -61,7 +61,7 @@ function splitCsv(content: string, sourceName: string): string[][] {
 
 export function parseCsv(content: string, sourceName: string, requiredColumns: string[]): CsvRow[] {
   const rows = splitCsv(content.replace(/^\uFEFF/, ''), sourceName);
-  const headers = rows[0].map((header) => header.trim());
+  const headers = rows[0]!.map((header) => header.trim());
 
   if (new Set(headers).size !== headers.length) {
     throw new Error(`${sourceName}: заголовки колонок повторяются`);
@@ -76,6 +76,6 @@ export function parseCsv(content: string, sourceName: string, requiredColumns: s
     if (values.length !== headers.length) {
       throw new Error(`${sourceName}: строка ${index + 2} содержит неверное число колонок`);
     }
-    return Object.fromEntries(headers.map((header, column) => [header, values[column]]));
+    return Object.fromEntries(headers.map((header, column) => [header, values[column]!]));
   });
 }

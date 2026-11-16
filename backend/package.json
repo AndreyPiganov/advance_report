@@ -6,7 +6,7 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
-    "test": "node --import tsx --test src/report/*.spec.ts"
+    "test": "tsc -p tsconfig.test.json && node --test --test-isolation=none .test-dist/test/*.spec.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

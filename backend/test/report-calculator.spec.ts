@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
-import { parseDataset } from './dataset';
-import { calculateReport } from './report-calculator';
-import { parseMoney, formatMoney } from './money';
+import { parseDataset } from '../src/modules/report/repositories/csv/dataset.mapper';
+import { calculateReport } from '../src/modules/report/domain/report-calculator';
+import { parseMoney, formatMoney } from '../src/common/utils/money';
 
 const dataPath = (name: string) => join(process.cwd(), 'data', name);
 
@@ -69,7 +69,7 @@ test('distributes odd kopecks by largest remainder and work ID tie-break', () =>
     'payment_id,contract_id,work_id,purpose,amount,status,created_at,paid_at,refunded_at\nP-1,C-1,,Advance,0.01,paid,2026-01-01,2026-01-01,\n',
   );
   const report = calculateReport(dataset, '2026-01-01');
-  assert.deepEqual(report.contracts[0].works.map((work) => [work.workId, work.paid]), [
+  assert.deepEqual(report.contracts[0]!.works.map((work) => [work.workId, work.paid]), [
     ['W-2', '0.00'],
     ['W-1', '0.01'],
   ]);
