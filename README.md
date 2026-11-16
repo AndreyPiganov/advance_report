@@ -46,15 +46,39 @@
 
 Ссылкой на приватный репозиторий или архивом - туда, откуда получили задание. Задание, данные и решение не публикуйте.
 
-## Запуск приложения
-
-Нужен Node.js 22 или новее. Данные читаются из `backend/data/` при запуске сервиса. После изменения CSV перезапустите бэкенд.
-
-В первом терминале:
+## Запуск в Docker
 
 ```bash
+cp .env.example .env
+docker compose up -d --build --wait
+```
+
+Экран: `http://localhost:8080`, Swagger: `http://localhost:8080/api/docs`, OpenAPI: `http://localhost:8080/api/docs-json`.
+
+Compose запускает PostgreSQL, применяет миграции через сервис `migrate`, затем запускает Nest и nginx. При первом запуске модуль `imports` загружает исходные `backend/data/contracts.csv`, `works.csv`, `payments.csv` в базу. nginx отдаёт React и проксирует `/api/` в Nest. Данные PostgreSQL хранятся в именованном томе; `docker compose down` его сохраняет.
+
+Для разработки с автоматической перезагрузкой:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --build --wait
+docker compose -f docker-compose.dev.yml logs -f
+```
+
+Экран также доступен на порту `8080`. Обычный режим и разработка используют один порт; запускайте их по очереди или задавайте разные `HTTP_PORT`. PostgreSQL в режиме разработки доступен на localhost, порт `5432`. После изменения зависимостей или Prisma-схемы пересоберите контейнеры.
+
+## Локальная разработка
+
+Нужен Node.js 24.15 или новее. PostgreSQL и `DATABASE_URL` обязательны.
+
+Из корня проекта запустите базу, затем в первом терминале:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d postgres
 cd backend
 npm ci
+npm run build
+export DATABASE_URL=postgresql://advance_report:advance_report_local@localhost:5432/advance_report
+npm run prisma:migrate:deploy
 npm run start:dev
 ```
 
@@ -66,87 +90,118 @@ npm ci
 npm run dev
 ```
 
-Экран доступен по адресу `http://localhost:5173`. Он показывает отчёт на 10.11.2026 при первом открытии; дату можно изменить. API доступен по адресу `http://localhost:3000/api/report?date=2026-11-10`.
+Vite доступен на `http://localhost:5173`, Nest — на `http://localhost:3000`. Используйте свои параметры подключения, если меняли PostgreSQL в `.env`. Сам Nest получает настройки из окружения процесса; `.env` автоматически читает Docker Compose.
 
-Для одного сервиса соберите фронтенд командой `npm run build` в `frontend/`, затем бэкенд той же командой в `backend/` и запустите там `npm start`. Собранный экран откроется по адресу `http://localhost:3000/`. Переменная `DATA_DIR` задаёт другую папку CSV; `PORT` меняет порт API.
+Для запуска собранного экрана через Nest соберите фронтенд (`npm run build` в `frontend/`), затем бэкенд и запустите `npm start` в `backend/` с заданным `DATABASE_URL` и применёнными миграциями. Экран откроется на порту `3000`.
 
-## Запуск в Docker
+## CSV, первое разворачивание и расписание
 
-Из корня проекта, с установленными Docker и Docker Compose:
+`imports` читает три файла из `DATA_DIR`, проверяет их и записывает в PostgreSQL через Prisma. В `report` нет парсеров и файлового ввода: он получает модели из базы в одной транзакции `RepeatableRead` и строит отчёт на выбранную дату.
 
-```bash
-cp .env.example .env
-docker compose up -d --build --wait
-```
+Первоначальный импорт выполняется до открытия HTTP-порта. Успех отмечается записью `csv` в таблице `import_states` в той же транзакции, что и учётные данные. При перезапуске с сохранённой базой эта загрузка пропускается. Две одновременно запускаемые копии приложения проверяют отметку под блокировкой PostgreSQL; первоначальный импорт выполняется один раз. При ошибке первоначального импорта приложение не запускается, отметка не записывается.
 
-Откройте `http://localhost:8080`. nginx отдаёт собранный React и проксирует `/api/` в Nest. Порт бэкенда доступен внутри сети Compose. Исходные CSV подключаются к контейнеру только для чтения; в образ они не копируются. Сервис проверяет данные перед открытием HTTP-порта, nginx запускается после успешной проверки готовности бэкенда.
+По умолчанию повторный импорт выполняется **в начале каждого часа по московскому времени**, cron `0 * * * *`. Планировщик находится в модуле `imports` и использует `@nestjs/schedule`. Неудачный плановый импорт записывается в лог, данные и отметка успешного импорта сохраняют предыдущее значение; следующая попытка выполняется по расписанию.
 
-Логи и остановка:
+Кнопка **«Обновить данные»** вызывает `POST /api/imports/csv/refresh`, ждёт завершения импорта и заново запрашивает отчёт на текущую дату. Пока запрос выполняется, кнопка недоступна. Ошибка обновления отображается рядом с последним отчётом. Кнопка **«Показать»** читает отчёт из базы на выбранную дату.
 
-```bash
-docker compose logs -f
-docker compose down
-```
-
-Для разработки с автоматической перезагрузкой Nest и Vite:
+Ручной запрос без интерфейса:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d --build --wait
-docker compose -f docker-compose.dev.yml logs -f
-docker compose -f docker-compose.dev.yml down
+curl -f -X POST http://localhost:8080/api/imports/csv/refresh
+curl -f 'http://localhost:8080/api/report?date=2026-11-10'
 ```
 
-Экран также открывается на `http://localhost:8080`; nginx проксирует запросы к Vite и поддерживает WebSocket для обновления интерфейса. Файлы `src/` подключаются с хоста, зависимости остаются в контейнерах. После изменения `package.json` или TypeScript-конфигурации пересоберите контейнеры. Обычный режим и разработка используют один HTTP-порт, поэтому запускайте их по очереди либо задавайте разные значения `HTTP_PORT`.
+Формат исходных файлов описан в [backend/data/FORMAT.md](backend/data/FORMAT.md). Все три файла проверяются до записи. Повторные ID обновляют существующие записи, отсутствующие строки сохраняются. Дубли ID внутри одного набора отклоняются. Сохранение идёт в одной транзакции, включая отметку успешного импорта; конфликт или ошибка откатывают всё. Одновременные импорты сериализуются блокировкой PostgreSQL.
+
+Успешный ручной ответ HTTP 200:
+
+```json
+{"processed":{"contracts":2,"works":9,"payments":8}}
+```
+
+Числа означают обработанные строки, включая неизменённые. Некорректные CSV возвращают HTTP 400, конфликт связей — 409, недоступные файлы — 503. Отчёт продолжает читать ранее сохранённые данные из базы.
+
+## Настройки
 
 | Переменная | По умолчанию | Назначение |
 | --- | --- | --- |
-| `HTTP_PORT` | `8080` | Порт nginx на хосте, задаётся для Compose. |
-| `DATA_DIR` | `./backend/data` для Compose; `data` для локального Nest | Папка с CSV. В Compose путь относится к корню проекта; при локальном запуске — к текущему каталогу `backend/`. |
-| `PORT` | `3000` | Порт локального Nest. В контейнерах зафиксирован на `3000`. |
-| `FRONTEND_DIST_DIR` | `../frontend/dist` | Собранный экран для локального запуска через Nest. В Docker экран обслуживает nginx. |
+| `DATABASE_URL` | Обязательна локально; задана в Compose | Подключение PostgreSQL. Режим работы отчёта из CSV отсутствует. |
+| `DATA_DIR` | `data` для локального Nest; `./backend/data` на хосте для Compose | Папка CSV для модуля `imports`. В Docker подключается только для чтения к `/app/data`. |
+| `IMPORT_CRON` | `0 * * * *` | Расписание обновления CSV. Поддерживаются cron-выражения с пятью или шестью полями. |
+| `IMPORT_TIME_ZONE` | `Europe/Moscow` | Часовой пояс расписания. |
+| `HTTP_PORT` | `8080` | Порт nginx на хосте. |
+| `PORT` | `3000` | Порт локального Nest; внутри Docker фиксирован на `3000`. |
+| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | См. `.env.example` | Параметры базы Compose. Значения подставляются в URL подключения. |
+| `POSTGRES_PORT` | `5432` | Порт PostgreSQL на localhost в режиме разработки. |
+| `FRONTEND_DIST_DIR` | `../frontend/dist` | Собранный экран при локальном запуске через Nest. |
 
-`.env` используется Docker Compose. Для запуска без Docker передавайте переменные через окружение процесса. Локальный Vite проксирует `/api` на `http://127.0.0.1:3000`; адрес можно переопределить переменной `API_PROXY_TARGET`.
+## API и Swagger
 
-## Структура бэкенда
+Swagger UI доступен на `/api/docs`, OpenAPI JSON — на `/api/docs-json`. Документация включает вложенные схемы отчёта, денежные строки и ручное обновление CSV.
+
+| Метод и маршрут | Результат |
+| --- | --- |
+| `GET /api/report?date=2026-11-10` | Отчёт из PostgreSQL на дату включительно. |
+| `POST /api/imports/csv/refresh` | Принудительная загрузка трёх CSV в PostgreSQL. |
+| `GET /api/health` | Проверка приложения и подключения PostgreSQL. |
+
+Общий `ValidationPipe` проверяет HTTP query через `class-validator` и отклоняет неизвестные параметры. Строки CSV проходят DTO, затем проверки дублирующихся ID, связей и дат статусов. Деньги хранятся целыми копейками `BIGINT`, расчёт использует `bigint`, API возвращает строки с двумя знаками после точки. Максимальная сумма — `92233720368547758.07` ₽.
+
+## Модули и миграции Prisma
 
 ```text
 backend/
   src/
-    app.module.ts
-    main.ts
-    config/                   # Настройки окружения и их проверка
-    common/utils/             # Точные деньги и календарные даты
+    common/                   # Модели учёта, DTO, проверки, деньги и даты
+    config/                   # Окружение, ValidationPipe и Swagger
+    database/                 # PrismaModule, PrismaService, запуск миграций
+    generated/prisma/         # Генерируется; клиент не хранится в Git
     modules/
-      health/                 # GET /api/health — готовность приложения
+      imports/
+        controllers/          # Ручное обновление CSV
+        parsers/              # CSV и преобразование входных данных
+        services/             # Чтение файлов и сценарии импорта
+        scheduling/           # Первый запуск и ежечасное обновление
+        repositories/         # Запись и отметка импорта через Prisma
       report/
-        report.module.ts      # Регистрация контроллера, сервиса и репозитория
-        controllers/          # HTTP API
-        dto/                  # Публичный формат ответа
-        pipes/                # Проверка даты в HTTP-запросе
-        services/             # Построение отчёта через репозиторий и расчёт
-        domain/               # Модели и правила расчёта без Nest и файловой системы
-        repositories/         # Контракт источника данных и реализация для CSV
-          csv/                # Парсинг и проверка CSV
-  test/                       # Расчёты, загрузка данных и HTTP-интеграция
-  data/                       # Исходные CSV
+        controllers/          # Получение отчёта на дату
+        dto/                  # Query и публичный ответ
+        services/             # Получение данных и построение отчёта
+        domain/               # Правила расчёта без файлового ввода
+        repositories/         # Чтение PostgreSQL через Prisma
+      health/
+  prisma/                     # schema.prisma и SQL-миграции
+  test/                       # Расчёт, импорт, расписание, API и миграции
+  data/                       # Исходные CSV для загрузки в PostgreSQL
 ```
 
-`AppModule` собирает функциональные модули. `ReportService` зависит от абстрактного `ReportRepository`; `ReportModule` связывает его с `CsvReportRepository`. Это позволяет менять источник данных без изменений контроллера и расчёта. Ошибки query-параметра возвращают HTTP 400, ошибки чтения CSV останавливают запуск. Публичный формат `GET /api/report?date=YYYY-MM-DD` сохранён; суммы возвращаются строками с двумя знаками после точки.
+`ReportRepository` всегда связан с `PrismaReportRepository`. `ImportRepository` связан с `PrismaImportRepository`; оба используют общий `PrismaModule`. CSV читаются только модулем `imports`. Prisma Client генерируется перед сборкой, тестами и `start:dev`.
+
+```bash
+cd backend
+npm run prisma:validate
+npm run build
+npm run prisma:migrate:deploy
+```
+
+Для миграций нужна `DATABASE_URL` в окружении. Скрипт на новой базе применяет миграции; базу прежней версии с записью `001-accounting` в `app_migrations` принимает за baseline и сохраняет учётные записи. Следующая миграция добавляет `import_states`. Повторное применение безопасно. Произвольная неизвестная существующая схема автоматически не принимается.
+
+Для следующих изменений схемы выполняйте `npm run prisma:migrate:dev -- --name change_name` на базе разработки и сохраняйте новую миграцию в Git. В Docker миграции выполняет отдельный сервис `migrate` перед запуском Nest.
 
 ## Проверки
 
 ```bash
 cd backend
 npm ci
-npm test
+TEST_DATABASE_URL=postgresql://advance_report:advance_report_local@localhost:5432/advance_report npm test
 npm run build
 ```
 
-Тесты проверяют расчёт на 10.11.2026, возврат на границе дат, распределение копеек, некорректные ссылки и даты, загрузку модулей и ответы HTTP API. Для HTTP-теста нужен доступ к временному локальному порту.
-
-Конфигурации контейнеров проверяются без запуска:
+Тесты создают и удаляют только собственные временные схемы. Проверяются точность отчёта, импорт без дубликатов, сохранность данных при ошибках, первоначальная загрузка и пропуск на перезапуске, зарегистрированное часовое расписание и его callback, ручное обновление, Swagger и миграция прежней схемы. Без `TEST_DATABASE_URL` проверки PostgreSQL и HTTP-интеграции пропускаются, остальные тесты выполняются.
 
 ```bash
 docker compose config --quiet
 docker compose -f docker-compose.dev.yml config --quiet
 ```
+
+Решения и допущения: [DECISIONS.md](DECISIONS.md). Используются [Prisma](https://www.prisma.io/docs/guides/v7/frameworks/nestjs) и [Nest Schedule](https://docs.nestjs.com/techniques/task-scheduling).

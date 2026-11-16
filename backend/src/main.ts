@@ -4,11 +4,12 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { AppConfig } from './config/app.config';
+import { configureApp } from './config/configure-app';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(AppConfig);
-  app.setGlobalPrefix('api');
+  configureApp(app);
   app.enableShutdownHooks();
   if (existsSync(`${config.frontendDirectory}/index.html`)) {
     app.useStaticAssets(config.frontendDirectory);

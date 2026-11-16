@@ -1,0 +1,69 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Contract {
+  id          String    @id @map("contract_id")
+  contractor  String
+  amountCents BigInt    @map("amount_cents")
+  signedAt    DateTime  @map("signed_at") @db.Date
+  works       Work[]
+  payments    Payment[]
+
+  @@map("contracts")
+}
+
+model Work {
+  id          String    @id @map("work_id")
+  contractId  String    @map("contract_id")
+  title       String
+  priceCents  BigInt    @map("price_cents")
+  status      String
+  completedAt DateTime? @map("completed_at") @db.Date
+  cancelledAt DateTime? @map("cancelled_at") @db.Date
+  contract    Contract  @relation(fields: [contractId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payments    Payment[]
+
+  @@unique([id, contractId], map: "works_work_id_contract_id_key")
+  @@index([contractId], map: "works_contract_idx")
+  @@map("works")
+}
+
+model Payment {
+  id          String    @id @map("payment_id")
+  contractId  String    @map("contract_id")
+  workId      String?   @map("work_id")
+  purpose     String
+  amountCents BigInt    @map("amount_cents")
+  status      String
+  createdAt   DateTime  @map("created_at") @db.Date
+  paidAt      DateTime? @map("paid_at") @db.Date
+  refundedAt  DateTime? @map("refunded_at") @db.Date
+  contract    Contract  @relation(fields: [contractId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  work        Work?     @relation(fields: [workId, contractId], references: [id, contractId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([contractId], map: "payments_contract_idx")
+  @@index([workId, contractId], map: "payments_work_idx")
+  @@map("payments")
+}
+
+// Retained to recognize existing installations when adopting Prisma migrations.
+model LegacyMigration {
+  version   String   @id
+  appliedAt DateTime @default(now()) @map("applied_at") @db.Timestamptz(6)
+
+  @@map("app_migrations")
+}
+
+model ImportState {
+  id             String   @id
+  lastImportedAt DateTime @map("last_imported_at") @db.Timestamptz(6)
+
+  @@map("import_states")
+}

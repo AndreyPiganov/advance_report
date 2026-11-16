@@ -21,8 +21,7 @@ function contractCountLabel(count: number): string {
   return `${count} договоров`;
 }
 
-async function fetchReport(date: string, signal: AbortSignal): Promise<ReportResponse> {
-  const response = await fetch(`/api/report?date=${encodeURIComponent(date)}`, { signal });
+async function ensureOk(response: Response): Promise<void> {
   if (!response.ok) {
     let message = `Ошибка сервера: ${response.status}`;
     try {
@@ -33,6 +32,11 @@ async function fetchReport(date: string, signal: AbortSignal): Promise<ReportRes
     }
     throw new Error(message);
   }
+}
+
+async function fetchReport(date: string, signal: AbortSignal): Promise<ReportResponse> {
+  const response = await fetch(`/api/report?date=${encodeURIComponent(date)}`, { signal });
+  await ensureOk(response);
   return (await response.json()) as ReportResponse;
 }
 
@@ -111,6 +115,10 @@ export default function App() {
   const [report, setReport] = useState<ReportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [requestVersion, setRequestVersion] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [refreshSuccess, setRefreshSuccess] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -125,13 +133,34 @@ export default function App() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [requestedDate]);
+  }, [requestedDate, requestVersion]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!date) return;
     window.history.replaceState(null, '', `?date=${encodeURIComponent(date)}`);
     setRequestedDate(date);
+    setRequestVersion((version) => version + 1);
+  }
+
+  async function refreshData() {
+    if (refreshing || loading) return;
+    setRefreshing(true);
+    setRefreshError(null);
+    setRefreshSuccess(false);
+    try {
+      const response = await fetch('/api/imports/csv/refresh', { method: 'POST' });
+      await ensureOk(response);
+      await response.json();
+      const updated = await fetchReport(requestedDate, new AbortController().signal);
+      setReport(updated);
+      setError(null);
+      setRefreshSuccess(true);
+    } catch (reason) {
+      setRefreshError(errorMessage(reason));
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   return (
@@ -145,12 +174,18 @@ export default function App() {
         <form className="date-form" onSubmit={submit}>
           <label htmlFor="report-date">Отчёт на дату</label>
           <div className="date-controls">
-            <input id="report-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
-            <button type="submit" disabled={loading}>Показать</button>
+            <input id="report-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} required disabled={refreshing} />
+            <button type="submit" disabled={loading || refreshing}>Показать</button>
           </div>
+          <button className="refresh-button" type="button" onClick={() => void refreshData()}
+            disabled={loading || refreshing} aria-busy={refreshing}>
+            {refreshing ? 'Обновляем данные…' : 'Обновить данные'}
+          </button>
         </form>
       </header>
 
+      {refreshError && <div className="state-panel state-error" role="alert">Не удалось обновить данные: {refreshError}</div>}
+      {refreshSuccess && <div className="refresh-success" role="status">Данные обновлены. Отчёт актуален на выбранную дату.</div>}
       {loading && <div className="state-panel" role="status">Загружаем отчёт…</div>}
       {error && !loading && <div className="state-panel state-error" role="alert">{error}</div>}
       {!loading && !error && report && (

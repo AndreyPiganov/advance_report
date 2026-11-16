@@ -1,6 +1,33 @@
 name: advance-report-dev
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-advance_report}
+      POSTGRES_USER: ${POSTGRES_USER:-advance_report}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-advance_report_local}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: migration
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-advance_report}:${POSTGRES_PASSWORD:-advance_report_local}@postgres:5432/${POSTGRES_DB:-advance_report}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   backend:
     build:
       context: .
@@ -9,9 +36,16 @@ services:
     environment:
       PORT: 3000
       DATA_DIR: /app/data
+      IMPORT_CRON: ${IMPORT_CRON:-0 * * * *}
+      IMPORT_TIME_ZONE: ${IMPORT_TIME_ZONE:-Europe/Moscow}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-advance_report}:${POSTGRES_PASSWORD:-advance_report_local}@postgres:5432/${POSTGRES_DB:-advance_report}
       TSC_WATCHFILE: DynamicPriorityPolling
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./backend/src:/app/src:ro
+      - prisma_generated:/app/src/generated
       - type: bind
         source: ${DATA_DIR:-./backend/data}
         target: /app/data
@@ -62,3 +96,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+volumes:
+  postgres_data:
+  prisma_generated:

@@ -1,18 +1,16 @@
 import { Module } from '@nestjs/common';
-import { AppConfigModule } from '../../config/app-config.module';
+import { PrismaModule } from '../../database/prisma.module';
 import { ReportController } from './controllers/report.controller';
-import { ReportDatePipe } from './pipes/report-date.pipe';
-import { CsvReportRepository } from './repositories/csv-report.repository';
 import { ReportRepository } from './repositories/report.repository';
 import { ReportService } from './services/report.service';
+import { PrismaReportRepository } from './repositories/prisma-report.repository';
 
 @Module({
-  imports: [AppConfigModule],
+  imports: [PrismaModule],
   controllers: [ReportController],
   providers: [
     ReportService,
-    ReportDatePipe,
-    { provide: ReportRepository, useClass: CsvReportRepository },
+    { provide: ReportRepository, useClass: PrismaReportRepository },
   ],
 })
 export class ReportModule {}

@@ -2,5 +2,7 @@
 **/node_modules/
 **/dist/
 **/.test-dist/
+backend/src/generated/*
+!backend/src/generated/.gitkeep
 **/*.tsbuildinfo
 .DS_Store

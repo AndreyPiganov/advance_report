@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
-import { parseDataset } from '../src/modules/report/repositories/csv/dataset.mapper';
+import { parseDataset } from '../src/modules/imports/parsers/csv/dataset.mapper';
 import { calculateReport } from '../src/modules/report/domain/report-calculator';
 import { parseMoney, formatMoney } from '../src/common/utils/money';
 

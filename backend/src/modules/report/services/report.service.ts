@@ -7,7 +7,7 @@ import { ReportRepository } from '../repositories/report.repository';
 export class ReportService {
   constructor(private readonly reportRepository: ReportRepository) {}
 
-  getReport(reportDate: string): Report {
-    return calculateReport(this.reportRepository.getDataset(), reportDate);
+  async getReport(reportDate: string): Promise<Report> {
+    return calculateReport(await this.reportRepository.getDataset(), reportDate);
   }
 }

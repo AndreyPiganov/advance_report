@@ -7,5 +7,6 @@
 **/node_modules
 **/dist
 **/.test-dist
+backend/src/generated
 **/*.tsbuildinfo
 backend/data
